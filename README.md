@@ -1,46 +1,157 @@
-# Getting Started with Create React App
+## next steps
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+- add a function `useObservableProps` (logic like `useProxy` but for props changes und auch ein ref objekt was immer aktuell ist wenn man drauf zugreift)
+- add a function `useOnMount()` => a wrapper for `useEffect(..., [])` where we can introduce timers und co
+    - sollte aber auch generator-funktionen verstehen können (die dann abgebrochen werden können)
+    - ist wichtig, da sonst klassische timer nicht funktionieren wie erhofft
+- dokumentiere, wie ein autocomplete beispiel aussieht
+- füge beispiele für generator-ersteller hinzu (setInterval, firestore)
+- useEffect und useAsyncEffect in gleiche Funktion schreiben - check https://stackoverflow.com/questions/16754956/check-if-function-is-a-generator
+- tests für async erweitern
+- im nächsten projekt damit arbeiten
 
-## Available Scripts
 
-In the project directory, you can run:
+## js event loop explained with code
 
-### `yarn start`
+```javascript
+function loop2Seconds() {
+  const s = new Date().getSeconds();
+  while (true) {
+    if (new Date().getSeconds() - s >= 2) return console.log("Good, looped for 2 seconds");
+  }
+}
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+setTimeout(() => {
+  console.log("A1");
+  loop2Seconds();
+  console.log("A2");
+}, 0);
+setTimeout(() => {
+  console.log("B1");
+  loop2Seconds();
+  console.log("B2");
+}, 0);
+console.log("C1");
+loop2Seconds();
+console.log("C2");
+```
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+log output:
 
-### `yarn test`
+```
+C1
+Good, looped for 2 seconds
+C2
+A1
+Good, looped for 2 seconds
+A2
+B1
+Good, looped for 2 seconds
+B2
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## generator finally explained with code
 
-### `yarn build`
+```javascript
+function* gen() {
+  try {
+    try {
+      console.log("function begin START");
+    } finally {
+      console.log("FINALLY function begin CALLED START");
+    }
+    try {
+      console.log("yield 1 START");
+      yield 1;
+    } finally {
+      console.log("FINALLY yield 1 CALLED START");
+    }
+    try {
+      console.log("yield 1 DONE");
+    } finally {
+      console.log("FINALLY yield 1 CALLED DONE");
+    }
+    yield 2;
+    try {
+      console.log("yield 2 DONE");
+    } finally {
+      console.log("FINALLY yield 2 CALLED DONE");
+    }
+    yield 3;
+    console.log("yield 3 DONE");
+  } finally {
+    console.log("FINALLY CALLED!");
+  }
+}
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+const g = gen();
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+console.log(g.next()); // { value: 1, done: false }
+console.log(g.return("foo")); // { value: "foo", done: true }
+console.log(g.next()); // { value: undefined, done: true }
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+log output:
 
-### `yarn eject`
+```
+function begin START
+FINALLY function begin CALLED START
+yield 1 START
+{value: 1, done: false}
+FINALLY yield 1 CALLED START
+FINALLY CALLED!
+{value: "foo", done: true}
+{value: undefined, done: true}
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+## async generator finally not always returns value
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+```javascript
+async function* gen() {
+  try {
+    console.log("function begin START");
+    await new Promise((r) => setTimeout(r, 500));
+    console.log("yield 1 START");
+    yield 1;
+    console.log("yield 1 DONE");
+    yield 2;
+    console.log("yield 2 DONE");
+    yield 3;
+    console.log("yield 3 DONE");
+  } finally {
+    console.log("FINALLY CALLED!");
+    return () => {};
+  }
+}
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+async function doIt() {
+  const g = gen();
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+  console.log("1. g.next", await g.next()); // { value: 1, done: false }
+  console.log("2. g.next", await g.next()); // { value: 2, done: false }
+  console.log("3. g.next", await g.next()); // { value: 3, done: false }
+  console.log("4. g.next", await g.next()); // { value: () => {}, done: true }
+  console.log("5. g.next", await g.next()); // { value: undefined, done: true }
+  console.log("5. g.next", await g.return()); // { value: undefined, done: true }
+}
 
-## Learn More
+doIt().then(() => console.log("ready"));
+```
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+log output:
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+```
+function begin START
+yield 1 START
+1. g.next {value: 1, done: false}
+yield 1 DONE
+2. g.next {value: 2, done: false}
+yield 2 DONE
+3. g.next {value: 3, done: false}
+yield 3 DONE
+FINALLY CALLED!
+4. g.next {done: true, value: ƒ}
+5. g.next {value: undefined, done: true}
+5. g.next {value: undefined, done: true}
+ready
+```
