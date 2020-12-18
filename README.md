@@ -2,16 +2,17 @@
 
 - add a function `useObservableProps` (logic like `useProxy` but for props changes und auch ein ref objekt was immer aktuell ist wenn man drauf zugreift)
 - add a function `useOnMount()` => a wrapper for `useEffect(..., [])` where we can introduce timers und co
-    - sollte aber auch generator-funktionen verstehen können (die dann abgebrochen werden können)
-    - ist wichtig, da sonst klassische timer nicht funktionieren wie erhofft
+  - sollte aber auch generator-funktionen verstehen können (die dann abgebrochen werden können)
+  - ist wichtig, da sonst klassische timer nicht funktionieren wie erhofft
 - dokumentiere, wie ein autocomplete beispiel aussieht
 - füge beispiele für generator-ersteller hinzu (setInterval, firestore)
 - useEffect und useAsyncEffect in gleiche Funktion schreiben - check https://stackoverflow.com/questions/16754956/check-if-function-is-a-generator
 - tests für async erweitern
 - im nächsten projekt damit arbeiten
 
-
 ## js event loop explained with code
+
+**TLDR;** synchronous execution is never intercepted by any calls 
 
 ```javascript
 function loop2Seconds() {
@@ -48,6 +49,130 @@ A2
 B1
 Good, looped for 2 seconds
 B2
+```
+
+## js event loop with promises
+
+Anscheinend werden Promises vorher ausgeführt, aber kein Plan :-D
+
+```javascript
+setTimeout(() => {
+  console.log("A1");
+  loop2Seconds();
+  console.log("A2");
+}, 0);
+Promise.resolve().then(() => {
+  console.log("B1");
+  loop2Seconds();
+  console.log("B2");
+});
+console.log("C1");
+loop2Seconds();
+console.log("C2");
+```
+
+log output
+
+```
+C1
+C2
+B1
+B2
+A1
+A2
+```
+
+## js event loop with async function
+
+```javascript
+(async function () {
+  setTimeout(() => {
+    console.log("A1");
+    loop2Seconds();
+    console.log("A2");
+  }, 0);
+  await new Promise((resolve) => {
+    console.log("B1");
+    loop2Seconds();
+    console.log("B2");
+    setTimeout(() => {
+      console.log("C1");
+      loop2Seconds();
+      console.log("C2");
+      resolve();
+    }, 0);
+  });
+  console.log("D1");
+  loop2Seconds();
+  console.log("D2");
+})();
+```
+
+log output
+
+```
+B1
+B2
+A1
+A2
+C1
+C2
+D1
+D2
+```
+
+## js event loop with generator functions
+
+```javascript
+const generator = (function* () {
+  try {
+    console.log("A1");
+    let counter = 0;
+    while (true) {
+      counter++;
+      const v = counter;
+      setTimeout(() => {
+        console.log(v, "G");
+      }, 0);
+      yield;
+    }
+    console.log("A2");
+  } finally {
+    console.log("A3");
+  }
+})();
+
+console.log("B1");
+generator.next();
+console.log("B2");
+
+setTimeout(() => {
+  console.log("C1");
+}, 0);
+
+console.log("D1");
+generator.next();
+console.log("D2");
+
+console.log("E1");
+generator.return();
+console.log("E2");
+```
+
+log output:
+
+```
+B1
+A1
+B2
+D1
+D2
+E1
+A3
+E2
+1 "G"
+C1
+2 "G"
 ```
 
 ## generator finally explained with code
